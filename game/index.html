@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elang Laut — Island Run</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1c2b;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #eef6fb; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(8, 20, 32, 0.62); border: 1px solid rgba(159, 195, 221, 0.35);
+    border-radius: 10px; backdrop-filter: blur(2px); }
+  .label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #9fc3dd; }
+  .big { font-size: 30px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+
+  #hud-topleft { position: absolute; top: 14px; left: 14px; padding: 10px 14px; min-width: 210px; }
+  #hud-mission { font-size: 15px; font-weight: 700; color: #ffd34d; }
+  #hud-mission-line { display: flex; gap: 18px; margin-top: 6px; }
+  #hud-mission-line .num { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #hud-timer.urgent { color: #ff5a4e; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+
+  #hud-topcenter { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    padding: 6px 10px 8px; text-align: center; }
+  #hud-compass { display: block; }
+  #hud-hdg { font-size: 20px; font-weight: 800; color: #ffd34d; font-variant-numeric: tabular-nums; }
+
+  #hud-topright { position: absolute; top: 14px; right: 14px; padding: 10px; text-align: right; }
+  #hud-minimap { display: block; border-radius: 6px; border: 1px solid rgba(159,195,221,0.4); }
+  #hud-damage-row { margin-top: 8px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .bar { width: 110px; height: 9px; background: rgba(255,255,255,0.14); border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; background: #37d67a; border-radius: 5px; transition: width 0.15s linear; }
+  #hud-damage-fill { background: #ff5a4e; width: 0%; }
+
+  #hud-bottomleft { position: absolute; left: 14px; bottom: 14px; padding: 10px 14px;
+    display: flex; gap: 14px; align-items: center; }
+  #hud-attitude { border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); }
+  #hud-bottomleft .col { display: flex; flex-direction: column; gap: 2px; }
+
+  #hud-bottomright { position: absolute; right: 14px; bottom: 14px; padding: 10px 14px; min-width: 190px; }
+  #hud-bottomright .row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  #hud-bottomright .row:first-child { margin-top: 0; }
+  #hud-throttle-fill { background: #3fa7ff; }
+  #hud-fuel-fill { background: #37d67a; }
+  #hud-fuel-fill.low { background: #ff5a4e; }
+  #hud-bottomright .val { font-size: 13px; font-weight: 700; width: 40px; text-align: right;
+    font-variant-numeric: tabular-nums; }
+
+  #hud-toast { position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+    padding: 10px 22px; font-size: 19px; font-weight: 700; text-align: center;
+    opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
+  #hud-toast.show { opacity: 1; }
+
+  .warn { position: absolute; left: 50%; transform: translateX(-50%); padding: 8px 18px;
+    font-weight: 800; font-size: 17px; letter-spacing: 0.08em; color: #fff;
+    background: rgba(255, 60, 40, 0.85); border-radius: 8px; opacity: 0; transition: opacity 0.2s; }
+  .warn.show { opacity: 1; animation: blink 0.7s steps(2) infinite; }
+  #hud-stall { top: 34%; }
+  #hud-lowfuel { top: 42%; background: rgba(255, 140, 26, 0.9); }
+
+  /* ---------- Overlays ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center;
+    justify-content: center; background: rgba(5, 14, 24, 0.45); }
+  .card { width: min(680px, 92vw); max-height: 92vh; overflow-y: auto; padding: 28px 30px;
+    background: rgba(10, 26, 40, 0.92); border: 1px solid rgba(159,195,221,0.4);
+    border-radius: 16px; text-align: center; }
+  .card h1 { font-size: 44px; letter-spacing: 0.02em; color: #ffd34d; }
+  .card h1 .sea { color: #6fc3ff; }
+  .subtitle { margin-top: 6px; font-size: 16px; color: #cfe4f2; }
+  .missions { display: flex; gap: 10px; margin-top: 20px; }
+  .mission-card { flex: 1; padding: 12px 10px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.06); border: 2px solid rgba(159,195,221,0.25); text-align: left; }
+  .mission-card:hover { border-color: #6fc3ff; }
+  .mission-card.selected { border-color: #ffd34d; background: rgba(255, 211, 77, 0.12); }
+  .mission-card h3 { font-size: 16px; color: #fff; }
+  .mission-card p { font-size: 12.5px; color: #b8d2e4; margin-top: 5px; line-height: 1.45; }
+  .mission-card .meta { margin-top: 8px; font-size: 12px; color: #ffd34d; font-weight: 700; }
+  .controls { margin-top: 18px; font-size: 13.5px; color: #b8d2e4; line-height: 1.9; text-align: left;
+    display: inline-block; }
+  .controls b { color: #fff; background: rgba(255,255,255,0.12); border-radius: 5px; padding: 1px 7px;
+    font-family: ui-monospace, monospace; }
+  .btn { pointer-events: auto; display: inline-block; margin-top: 20px; padding: 13px 34px;
+    font-size: 18px; font-weight: 800; letter-spacing: 0.04em; color: #10202f; cursor: pointer;
+    background: #ffd34d; border: none; border-radius: 10px; }
+  .btn:hover { background: #ffdf7a; }
+  .btn.ghost { background: transparent; color: #d7ecfa; border: 2px solid rgba(159,195,221,0.5);
+    font-size: 15px; padding: 10px 22px; margin-left: 8px; }
+  .btn-row { margin-top: 6px; }
+  #menu-best { margin-top: 14px; font-size: 14px; color: #ffd34d; font-weight: 700; }
+  .end-title { font-size: 40px; font-weight: 900; }
+  .end-title.win { color: #37d67a; }
+  .end-title.lose { color: #ff5a4e; }
+  #end-sub { margin-top: 8px; font-size: 16px; color: #cfe4f2; }
+  #end-breakdown { margin: 18px auto 0; max-width: 420px; text-align: left; font-size: 15px; }
+  #end-breakdown div { display: flex; justify-content: space-between; padding: 7px 2px;
+    border-bottom: 1px solid rgba(159,195,221,0.18); }
+  #end-breakdown .total { font-size: 19px; font-weight: 800; color: #ffd34d; border-bottom: none; }
+  #end-best { margin-top: 12px; font-size: 14px; color: #ffd34d; font-weight: 700; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hud-topleft" class="panel">
+    <div id="hud-mission">Ring Run</div>
+    <div id="hud-mission-line">
+      <div><div class="label">Gerbang</div><div class="num" id="hud-rings">0/8</div></div>
+      <div><div class="label">Waktu</div><div class="num" id="hud-timer">04:20</div></div>
+      <div><div class="label">Skor</div><div class="num" id="hud-score">0</div></div>
+    </div>
+  </div>
+
+  <div id="hud-topcenter" class="panel">
+    <canvas id="hud-compass" width="240" height="30"></canvas>
+    <div id="hud-hdg">000°</div>
+  </div>
+
+  <div id="hud-topright" class="panel">
+    <canvas id="hud-minimap" width="140" height="140"></canvas>
+    <div id="hud-damage-row"><span class="label">Kerusakan</span>
+      <div class="bar"><div id="hud-damage-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="hud-bottomleft" class="panel">
+    <canvas id="hud-attitude" width="120" height="120"></canvas>
+    <div class="col">
+      <div><div class="label">Ketinggian</div><div class="big" id="hud-alt">0 m</div></div>
+      <div><div class="label">Kecepatan</div><div class="big" id="hud-spd">0 km/h</div></div>
+    </div>
+  </div>
+
+  <div id="hud-bottomright" class="panel">
+    <div class="row"><span class="label">Throttle</span><div class="bar"><div id="hud-throttle-fill"></div></div><span class="val" id="hud-throttle-val">0%</span></div>
+    <div class="row"><span class="label">Bahan bakar</span><div class="bar"><div id="hud-fuel-fill"></div></div><span class="val" id="hud-fuel-val">100%</span></div>
+  </div>
+
+  <div id="hud-toast" class="panel"></div>
+  <div id="hud-stall" class="warn">STALL — TURUNKAN HIDUNG, TAMBAH GAS</div>
+  <div id="hud-lowfuel" class="warn">BAHAN BAKAR MENIPIS</div>
+</div>
+
+<div id="overlay-menu" class="overlay">
+  <div class="card">
+    <h1>ELANG <span class="sea">LAUT</span></h1>
+    <div class="subtitle">Island Run — terbang melintasi kepulauan, lewati gerbang, mendarat dengan mulus.</div>
+    <div class="missions">
+      <div class="mission-card selected" data-mission="ring-run">
+        <h3>Ring Run</h3>
+        <p>8 gerbang, satu putaran pulau. Terbang bersih, mendarat mulus.</p>
+        <div class="meta">4:20 &middot; 8 gerbang</div>
+      </div>
+      <div class="mission-card" data-mission="island-hop">
+        <h3>Island Hop</h3>
+        <p>10 gerbang mengelilingi kepulauan. Angin sepoi, bahan bakar pas-pasan.</p>
+        <div class="meta">5:30 &middot; 10 gerbang</div>
+      </div>
+      <div class="mission-card" data-mission="storm-courier">
+        <h3>Storm Courier</h3>
+        <p>8 gerbang rendah di tengah badai. Kurir pos pulau tidak kenal cuaca.</p>
+        <div class="meta">3:50 &middot; angin kencang</div>
+      </div>
+    </div>
+    <div class="controls">
+      <b>&uarr;/W</b> naik &nbsp; <b>&darr;/S</b> turun &nbsp; <b>&larr;/A</b> belok kiri &nbsp; <b>&rarr;/D</b> belok kanan<br>
+      <b>Shift</b> tambah gas &nbsp; <b>Ctrl</b> kurangi gas &nbsp; <b>Spasi</b> rem<br>
+      <b>C</b> kamera kokpit &nbsp; <b>P</b> jeda &nbsp; <b>R</b> ulangi misi &nbsp; <b>M</b> suara<br>
+      Seret mouse di layar untuk mengemudi. Mendaratlah di landasan setelah semua gerbang dilewati.
+    </div>
+    <div class="btn-row">
+      <button id="btn-start" class="btn">TERBANG</button>
+      <button id="btn-mute" class="btn ghost">Suara: Hidup</button>
+    </div>
+    <div id="menu-best"></div>
+  </div>
+</div>
+
+<div id="overlay-pause" class="overlay hidden">
+  <div class="card">
+    <h1 style="font-size:32px">JEDA</h1>
+    <div class="subtitle">Pesawat menunggu di udara. Tekan P untuk lanjut.</div>
+    <div class="btn-row">
+      <button id="btn-resume" class="btn">LANJUT</button>
+      <button id="btn-quit" class="btn ghost">MENU UTAMA</button>
+    </div>
+  </div>
+</div>
+
+<div id="overlay-end" class="overlay hidden">
+  <div class="card">
+    <div id="end-title" class="end-title win">MISI SELESAI!</div>
+    <div id="end-sub"></div>
+    <div id="end-breakdown"></div>
+    <div id="end-best"></div>
+    <div class="btn-row">
+      <button id="btn-again" class="btn">TERBANG LAGI</button>
+      <button id="btn-menu" class="btn ghost">MENU UTAMA</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
